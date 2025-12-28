@@ -55,17 +55,6 @@
         .header h1 { font-size: 3.5rem; font-weight: 800; letter-spacing: 1.5px; }
         .header h2 { font-size: 1.2rem; font-weight: 300; opacity: 0.9; text-transform: uppercase; letter-spacing: 3px; }
         .content { padding: 40px; }
-        .section-title {
-            font-size: 1.6rem;
-            font-weight: 700;
-            color: var(--primary-blue);
-            margin-bottom: 25px;
-            padding-bottom: 12px;
-            border-bottom: 3px solid var(--border);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
         .form-group { margin-bottom: 20px; }
         .form-group label { display: block; font-size: 0.85rem; font-weight: 700; margin-bottom: 8px; color: var(--primary-blue); }
         input { width: 100%; padding: 12px; border: 2px solid #ddd; border-radius: 8px; }
@@ -231,45 +220,62 @@
         import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, setDoc, deleteDoc, onSnapshot, collection } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
+        // ==========================================
+        // 1. YOUR FIREBASE CONFIG
+        // ==========================================
+        const myFirebaseConfig = {
+            apiKey: "AIzaSyBHiSB9vrpu46QkGSzvKx3K4yhTJHqZNL8",
+            authDomain: "test-mode-93c1c.firebaseapp.com",
+            projectId: "test-mode-93c1c",
+            storageBucket: "test-mode-93c1c.firebasestorage.app",
+            messagingSenderId: "1089404868642",
+            appId: "1:1089404868642:web:db23f81846c4276b09127b",
+            measurementId: "G-PW68V2H1NV"
+        };
+
         let studentData = {};
         let isCloud = false;
         let db, auth, appId;
         let user = null;
 
-        // --- DATA PERSISTENCE LAYER ---
         const loadInitialData = () => {
             const saved = localStorage.getItem('far3_data');
-            if (saved) {
-                studentData = JSON.parse(saved);
-            }
+            if (saved) studentData = JSON.parse(saved);
         };
 
         const persistLocal = () => {
             localStorage.setItem('far3_data', JSON.stringify(studentData));
         };
 
-        // --- INITIALIZATION ---
         const initApp = async () => {
             const status = document.getElementById('statusIndicator');
             loadInitialData();
             
-            const configData = typeof __firebase_config !== 'undefined' ? __firebase_config : null;
+            let config = null;
+            let useEnvToken = false;
+
+            if (typeof __firebase_config !== 'undefined' && __firebase_config) {
+                config = JSON.parse(__firebase_config);
+                useEnvToken = true;
+            } else if (myFirebaseConfig && myFirebaseConfig.apiKey) {
+                config = myFirebaseConfig;
+                useEnvToken = false;
+            }
             
-            if (!configData) {
-                status.textContent = "Local Desktop Mode";
+            if (!config) {
+                status.textContent = "Offline Mode";
                 status.className = "status-badge local";
                 renderTable();
                 return;
             }
 
             try {
-                const config = JSON.parse(configData);
                 const app = initializeApp(config);
                 auth = getAuth(app);
                 db = getFirestore(app);
                 appId = typeof __app_id !== 'undefined' ? __app_id : 'far3';
 
-                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                if (useEnvToken && typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
                     await signInWithCustomToken(auth, __initial_auth_token);
                 } else {
                     await signInAnonymously(auth);
@@ -289,7 +295,8 @@
                     }
                 });
             } catch (e) {
-                status.textContent = "Local Storage Mode";
+                console.error("Firebase Auth Error:", e);
+                status.textContent = "Auth Error";
                 status.className = "status-badge local";
                 renderTable();
             }
@@ -307,11 +314,10 @@
                     renderTable();
                 }
             }, (error) => {
-                console.warn("Firestore access restricted.");
+                console.warn("Firestore error:", error);
             });
         };
 
-        // --- UI ACTIONS ---
         window.switchView = (v) => {
             document.querySelectorAll('.view-section').forEach(s => s.classList.remove('active'));
             document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -376,7 +382,6 @@
             const mt = {}, ft = {};
             document.querySelectorAll('#mtInputs input').forEach(i => mt[i.dataset.key] = i.value);
             document.querySelectorAll('#ftInputs input').forEach(i => ft[i.dataset.key] = i.value);
-            
             const rmt = parseFloat(document.getElementById('formRawMT').value) || 0;
             const rft = parseFloat(document.getElementById('formRawFT').value) || 0;
 
@@ -404,14 +409,12 @@
             }
         };
 
-        // --- ENHANCED EXCEL LOGIC ---
         document.getElementById('excelInput').addEventListener('change', (e) => {
             const file = e.target.files[0];
             const reader = new FileReader();
             reader.onload = async (evt) => {
                 const wb = XLSX.read(evt.target.result, { type: 'binary' });
                 const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
-                
                 const findBetter = (row, tags) => {
                     const keys = Object.keys(row);
                     for (let tag of tags) {
@@ -426,65 +429,51 @@
                 for(let r of rows) {
                     const id = String(findBetter(r, ["ID", "StudentID", "StudentNo", "StudentNumber"]) || "");
                     if(!id) continue;
-                    
                     const rmt = parseFloat(findBetter(r, ["MTRaw", "RawMT", "MidtermAve", "MidtermAverage"])) || 0;
                     const rft = parseFloat(findBetter(r, ["FTRaw", "RawFT", "FinalAve", "FinalAverage"])) || 0;
-
                     const entry = {
                         name: findBetter(r, ["Name", "StudentName", "FullName"]) || "Unknown",
                         midterm: { 
-                            "S2": findBetter(r, ["S2", "SW2", "Seatwork2", "MTS2", "MidtermS2"]) || "0/10", 
-                            "R1": findBetter(r, ["R1", "Rec1", "Recitation1", "MTR1", "MidtermR1"]) || "0/10", 
-                            "Q1": findBetter(r, ["Q1", "Quiz1", "MTQ1", "MidtermQ1"]) || "0/40", 
-                            "Q2": findBetter(r, ["Q2", "Quiz2", "MTQ2", "MidtermQ2"]) || "0/48", 
-                            "TERM EXAM": findBetter(r, ["MTExam", "MidtermExam", "ExamMT", "TermExam"]) || "0/60" 
+                            "S2": findBetter(r, ["S2", "SW2", "Seatwork2", "MTS2"]) || "0/10", 
+                            "R1": findBetter(r, ["R1", "Rec1", "MTR1"]) || "0/10", 
+                            "Q1": findBetter(r, ["Q1", "Quiz1", "MTQ1"]) || "0/40", 
+                            "Q2": findBetter(r, ["Q2", "Quiz2", "MTQ2"]) || "0/48", 
+                            "TERM EXAM": findBetter(r, ["MTExam", "TermExam"]) || "0/60" 
                         },
                         final: { 
-                            "S1": findBetter(r, ["S1", "SW1", "Seatwork1", "FTS1", "FinalS1"]) || "0/18", 
-                            "Q1": findBetter(r, ["FTQ1", "FinalQ1", "FinalQuiz1", "Q1Final"]) || "0/40", 
-                            "Q2": findBetter(r, ["FTQ2", "FinalQ2", "FinalQuiz2", "Q2Final"]) || "0/50", 
-                            "TERM EXAM": findBetter(r, ["FTExam", "FinalExam", "ExamFT"]) || "0/60" 
+                            "S1": findBetter(r, ["S1", "SW1", "FTS1"]) || "0/18", 
+                            "Q1": findBetter(r, ["FTQ1", "FinalQ1"]) || "0/40", 
+                            "Q2": findBetter(r, ["FTQ2", "FinalQ2"]) || "0/50", 
+                            "TERM EXAM": findBetter(r, ["FTExam", "FinalExam"]) || "0/60" 
                         },
                         rawGrade: { midterm: rmt.toFixed(4), final: rft.toFixed(4), average: ((rmt+rft)/2).toFixed(4) },
                         encodedGrade: { 
-                            midterm: String(findBetter(r, ["encmt", "PortalMT", "EncodedMT", "MTGrade", "MidtermGrade"]) || "0.00"), 
-                            final: String(findBetter(r, ["encft", "PortalFT", "EncodedFT", "FTGrade", "FinalGrade"]) || "0.00") 
+                            midterm: String(findBetter(r, ["encmt", "PortalMT"]) || "0.00"), 
+                            final: String(findBetter(r, ["encft", "PortalFT"]) || "0.00") 
                         }
                     };
-                    
                     if(isCloud && user) await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'students', id), entry);
                     else studentData[id] = entry;
                     count++;
                 }
                 if(!isCloud) persistLocal();
-                alert(`Successfully processed ${count} records!`);
+                alert(`Processed ${count} records!`);
                 renderTable();
             };
             reader.readAsBinaryString(file);
         });
 
-        // --- SEARCH PORTAL ---
         window.verifyStudent = () => {
             const id = document.getElementById('studentNo').value.trim();
             const res = document.getElementById('gradeResults');
             const err = document.getElementById('errorMsg');
             err.style.display = 'none';
             if(!studentData[id]) { res.style.display = 'none'; err.style.display = 'block'; return; }
-            
             const d = studentData[id];
             document.getElementById('dispName').textContent = d.name;
             document.getElementById('dispId').textContent = "ID: " + id;
-            
-            // Format midterm table
-            document.getElementById('mtTable').innerHTML = Object.entries(d.midterm).map(([k,v]) => 
-                `<tr><td>${k}</td><td style="text-align:right"><b>${String(v).split('/')[0]}</b> <small>/${String(v).split('/')[1] || '?'}</small></td></tr>`
-            ).join('');
-            
-            // Format final table
-            document.getElementById('ftTable').innerHTML = Object.entries(d.final).map(([k,v]) => 
-                `<tr><td>${k}</td><td style="text-align:right"><b>${String(v).split('/')[0]}</b> <small>/${String(v).split('/')[1] || '?'}</small></td></tr>`
-            ).join('');
-
+            document.getElementById('mtTable').innerHTML = Object.entries(d.midterm).map(([k,v]) => `<tr><td>${k}</td><td style="text-align:right"><b>${String(v).split('/')[0]}</b> <small>/${String(v).split('/')[1] || '?'}</small></td></tr>`).join('');
+            document.getElementById('ftTable').innerHTML = Object.entries(d.final).map(([k,v]) => `<tr><td>${k}</td><td style="text-align:right"><b>${String(v).split('/')[0]}</b> <small>/${String(v).split('/')[1] || '?'}</small></td></tr>`).join('');
             document.getElementById('dispRawMT').textContent = d.rawGrade?.midterm || "0.0000";
             document.getElementById('dispRawFT').textContent = d.rawGrade?.final || "0.0000";
             document.getElementById('dispAvg').textContent = d.rawGrade?.average || "0.0000";
