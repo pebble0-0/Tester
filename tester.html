@@ -472,8 +472,21 @@
             const d = studentData[id];
             document.getElementById('dispName').textContent = d.name;
             document.getElementById('dispId').textContent = "ID: " + id;
-            document.getElementById('mtTable').innerHTML = Object.entries(d.midterm).map(([k,v]) => `<tr><td>${k}</td><td style="text-align:right"><b>${String(v).split('/')[0]}</b> <small>/${String(v).split('/')[1] || '?'}</small></td></tr>`).join('');
-            document.getElementById('ftTable').innerHTML = Object.entries(d.final).map(([k,v]) => `<tr><td>${k}</td><td style="text-align:right"><b>${String(v).split('/')[0]}</b> <small>/${String(v).split('/')[1] || '?'}</small></td></tr>`).join('');
+            
+            // Fixed order for Midterm: Seatwork (S2), Recitation (R1), Q1, Q2, TERM EXAM
+            const mtOrder = ["S2", "R1", "Q1", "Q2", "TERM EXAM"];
+            document.getElementById('mtTable').innerHTML = mtOrder.map(k => {
+                const v = d.midterm[k] || "0/0";
+                return `<tr><td>${k}</td><td style="text-align:right"><b>${String(v).split('/')[0]}</b> <small>/${String(v).split('/')[1] || '?'}</small></td></tr>`;
+            }).join('');
+            
+            // Fixed order for Final: Seatwork (S1), Q1, Q2, TERM EXAM
+            const ftOrder = ["S1", "Q1", "Q2", "TERM EXAM"];
+            document.getElementById('ftTable').innerHTML = ftOrder.map(k => {
+                const v = d.final[k] || "0/0";
+                return `<tr><td>${k}</td><td style="text-align:right"><b>${String(v).split('/')[0]}</b> <small>/${String(v).split('/')[1] || '?'}</small></td></tr>`;
+            }).join('');
+
             document.getElementById('dispRawMT').textContent = d.rawGrade?.midterm || "0.0000";
             document.getElementById('dispRawFT').textContent = d.rawGrade?.final || "0.0000";
             document.getElementById('dispAvg').textContent = d.rawGrade?.average || "0.0000";
@@ -497,4 +510,3 @@
     </script>
 </body>
 </html>
-
